@@ -25,6 +25,7 @@ RED_FONT = Font(name="Arial", color="9C0006")
 REVIEW_FILL = PatternFill(start_color="FFEB9C", end_color="FFEB9C", fill_type="solid")
 REVIEW_FONT = Font(name="Arial", color="9C6500")
 HYPERLINK_FONT = Font(name="Arial", color="0563C1", underline="single")
+NOTIFICATION_FONT = Font(name="Arial", color="1A1A1A")  # dark font for readability
 
 
 def _write_dataframe(ws, df: pd.DataFrame):
@@ -50,16 +51,21 @@ def build_cancelled_workbook(df: pd.DataFrame) -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "Cancelled Report"
+
+    df = df.copy()
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce").dt.strftime("%d-%m-%Y %H:%M")
+
     _write_dataframe(ws, df)
 
-    if "Carrier Status Color" in df.columns:
-        col_idx = list(df.columns).index("Carrier Status Color") + 1
+    if "Cancelled Status" in df.columns:
+        col_idx = list(df.columns).index("Cancelled Status") + 1
         color_map = {
             "GREEN": (GREEN_FILL, GREEN_FONT),
             "RED": (RED_FILL, RED_FONT),
             "REVIEW": (REVIEW_FILL, REVIEW_FONT),
         }
-        for r, val in enumerate(df["Carrier Status Color"].tolist(), start=2):
+        for r, val in enumerate(df["Cancelled Status"].tolist(), start=2):
             fill, font = color_map.get(val, (None, None))
             if fill:
                 cell = ws.cell(row=r, column=col_idx)
@@ -69,6 +75,11 @@ def build_cancelled_workbook(df: pd.DataFrame) -> bytes:
         for row in ws.iter_rows(min_row=2):
             for cell in row:
                 cell.font = BODY_FONT
+
+    if "Notification Message" in df.columns:
+        col_idx = list(df.columns).index("Notification Message") + 1
+        for r in range(2, len(df) + 2):
+            ws.cell(row=r, column=col_idx).font = NOTIFICATION_FONT
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -60,22 +60,22 @@ def build_cancelled_report(
 
     result = work.loc[mask].copy()
 
-    result["Carrier Status Color"] = result[carrier_status_col].apply(classify_carrier_status)
-    result["Seller Action Required"] = result["Carrier Status Color"].map(
+    result["Cancelled Status"] = result[carrier_status_col].apply(classify_carrier_status)
+    result["Seller Action Required"] = result["Cancelled Status"].map(
         {"GREEN": "Yes", "RED": "Yes", "REVIEW": "Manual Review"}
     )
-    result["WhatsApp Required"] = result["Carrier Status Color"].map(
+    result["WhatsApp Required"] = result["Cancelled Status"].map(
         {"GREEN": "Yes", "RED": "Yes", "REVIEW": "Yes"}
     )
-    result["Email Required"] = result["Carrier Status Color"].map(
+    result["Email Required"] = result["Cancelled Status"].map(
         {"GREEN": "No", "RED": "Yes", "REVIEW": "Yes"}
     )
     result["Notification Message"] = result.apply(
         lambda r: (
             "URGENT: Please cancel the shipment for this order immediately."
-            if r["Carrier Status Color"] == "RED"
+            if r["Cancelled Status"] == "RED"
             else "Please cancel the shipment for this order."
-            if r["Carrier Status Color"] == "GREEN"
+            if r["Cancelled Status"] == "GREEN"
             else "Carrier status unrecognised - please review manually."
         ),
         axis=1,
@@ -83,3 +83,36 @@ def build_cancelled_report(
 
     result = result.drop(columns=["_order_date_parsed"])
     return result
+
+
+EXPORT_COLUMNS = [
+    "Order ID",
+    "Date",
+    "Status",
+    "Payment Status",
+    "Shipping Carrier Status (All)",
+    "Cancelled Status",
+    "Seller Action Required",
+    "WhatsApp Required",
+    "Email Required",
+    "Notification Message",
+]
+
+
+def prepare_display_columns(result: pd.DataFrame, colmap: dict) -> pd.DataFrame:
+    """
+    Builds the fixed 10-column view used for BOTH the dashboard table and the
+    exported Cancelled_Report.xlsx, so the two always stay in sync.
+    """
+    out = pd.DataFrame()
+    out["Order ID"] = result[colmap["order_id"]]
+    out["Date"] = pd.to_datetime(result[colmap["order_date"]], errors="coerce")
+    out["Status"] = result[colmap["order_status"]]
+    out["Payment Status"] = result[colmap["payment_status"]]
+    out["Shipping Carrier Status (All)"] = result[colmap["shipping_carrier_status"]]
+    out["Cancelled Status"] = result["Cancelled Status"]
+    out["Seller Action Required"] = result["Seller Action Required"]
+    out["WhatsApp Required"] = result["WhatsApp Required"]
+    out["Email Required"] = result["Email Required"]
+    out["Notification Message"] = result["Notification Message"]
+    return out.reset_index(drop=True)
