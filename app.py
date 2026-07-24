@@ -75,6 +75,10 @@ def _highlight_color(val):
     return ""
 
 
+def _dark_font(val):
+    return "color: #1A1A1A"
+
+
 tab_cancelled, tab_delivered = st.tabs(["🚫 Cancelled Report", "✅ Delivered Report"])
 
 # ===========================================================================
@@ -118,43 +122,41 @@ with tab_cancelled:
 
                 if cancelled_df is not None:
                     st.subheader("Results")
-                    st.write(
-                        f"{len(cancelled_df):,} cancelled & refunded orders in the last {lookback_days} days."
-                    )
 
-                    if len(cancelled_df):
-                        st.dataframe(
-                            cancelled_df.style.map(_highlight_color, subset=["Carrier Status Color"]),
-                            use_container_width=True,
+                    display_df = cancelled_report.prepare_display_columns(cancelled_df, colmap_c)
+
+                    green_count = int((display_df["Cancelled Status"] == "GREEN").sum())
+                    red_count = int((display_df["Cancelled Status"] == "RED").sum())
+
+                    card_col1, card_col2 = st.columns(2)
+                    with card_col1:
+                        st.markdown(
+                            f"""<div style="background-color:#C6EFCE;border-radius:8px;padding:16px;text-align:center">
+                            <div style="font-size:28px;font-weight:700;color:#006100">{green_count}</div>
+                            <div style="font-size:13px;color:#006100">Green — Total orders requiring seller action</div>
+                            </div>""",
+                            unsafe_allow_html=True,
+                        )
+                    with card_col2:
+                        st.markdown(
+                            f"""<div style="background-color:#FFC7CE;border-radius:8px;padding:16px;text-align:center">
+                            <div style="font-size:28px;font-weight:700;color:#9C0006">{red_count}</div>
+                            <div style="font-size:13px;color:#9C0006">Red — Total orders not requiring seller action</div>
+                            </div>""",
+                            unsafe_allow_html=True,
                         )
 
-                        with st.expander("Preview seller notification messages"):
-                            preview = cancelled_df.apply(
-                                lambda r: notifications.build_message(
-                                    r[colmap_c["order_id"]],
-                                    r[colmap_c["shipping_carrier_status"]],
-                                    r["Carrier Status Color"],
-                                ),
-                                axis=1,
-                            )
-                            st.dataframe(
-                                pd.DataFrame(
-                                    {
-                                        "Order ID": cancelled_df[colmap_c["order_id"]],
-                                        "WhatsApp Required": cancelled_df["WhatsApp Required"],
-                                        "Email Required": cancelled_df["Email Required"],
-                                        "Message": preview,
-                                    }
-                                ),
-                                use_container_width=True,
-                            )
-                            st.caption(
-                                "Messages are generated for review/export only. To send automatically, "
-                                "configure Twilio (WhatsApp) and SMTP (Email) credentials in "
-                                "`.streamlit/secrets.toml` — see modules/notifications.py."
-                            )
+                    st.write(
+                        f"{len(display_df):,} cancelled & refunded orders in the last {lookback_days} days."
+                    )
 
-                        cancelled_xlsx = excel_writer.build_cancelled_workbook(cancelled_df)
+                    if len(display_df):
+                        styled = display_df.style.map(_highlight_color, subset=["Cancelled Status"]).map(
+                            _dark_font, subset=["Notification Message"]
+                        )
+                        st.dataframe(styled, use_container_width=True)
+
+                        cancelled_xlsx = excel_writer.build_cancelled_workbook(display_df)
                         st.download_button(
                             "⬇️ Download Cancelled_Report.xlsx",
                             data=cancelled_xlsx,
