@@ -12,14 +12,27 @@ reports:
 
 ## How it works
 
-1. Upload your HFC report (`.xlsx`, `.xls`, or `.csv`).
-2. Map your file's actual column headers to the fields the app needs
-   (auto-suggested — just confirm or correct).
-3. Click **Generate Reports**.
-4. Download both `.xlsx` files.
+The app has **two independent tabs**, each with its own file upload:
+
+- **Cancelled Report tab** — upload whichever export contains your cancelled
+  orders, map columns, generate `Cancelled_Report.xlsx`.
+- **Delivered Report tab** — upload whichever export contains your delivered
+  orders (can be the same file or a completely different one), map columns,
+  generate `Delivered_Report.xlsx`.
+
+You only need to map the columns each report actually uses — the Cancelled
+tab won't ask for Courier/Tracking Number, and the Delivered tab won't ask
+for Payment Status.
+
+Steps per tab:
+1. Upload the file (`.xlsx`, `.xls`, or `.csv`).
+2. Confirm/correct the auto-suggested column mapping.
+3. Click **Generate**.
+4. Download the `.xlsx`.
 
 No column names are hardcoded, so this works even if your export's headers
-differ slightly from month to month.
+differ slightly from month to month, and even if the two reports come from
+two different source files with different headers entirely.
 
 ## Business rules implemented
 
