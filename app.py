@@ -15,7 +15,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from modules import data_loader, cancelled_report, delivered_report, tracking, excel_writer
+from modules import data_loader, cancelled_report, delivered_report, tracking, excel_writer, notifications
 
 st.set_page_config(page_title="HFC Automation", page_icon="📦", layout="wide")
 
@@ -32,7 +32,7 @@ CANCELLED_FIELDS = [
     "order_date",
     "shipping_carrier_status",
 ]
-CANCELLED_OPTIONAL_FIELDS = ["seller_name", "courier"]  # used to build the WhatsApp message
+CANCELLED_OPTIONAL_FIELDS = ["courier"]  # courier used to build the WhatsApp message; name is entered manually
 DELIVERED_FIELDS = ["order_id", "order_status", "order_date", "sold_amount", "channel", "courier", "tracking_number"]
 
 
@@ -69,20 +69,6 @@ def render_column_mapping(df: pd.DataFrame, key_prefix: str, fields_needed, opti
     return colmap
 
 
-def _highlight_color(val):
-    if val == "GREEN":
-        return "background-color: #C6EFCE; color: #006100"
-    if val == "RED":
-        return "background-color: #FFC7CE; color: #9C0006"
-    if val == "REVIEW":
-        return "background-color: #FFEB9C; color: #9C6500"
-    return ""
-
-
-def _dark_font(val):
-    return "color: #1A1A1A"
-
-
 tab_cancelled, tab_delivered = st.tabs(["🚫 Cancelled Report", "✅ Delivered Report"])
 
 # ===========================================================================
@@ -106,12 +92,13 @@ with tab_cancelled:
         st.caption("Auto-suggested where possible — double-check before running.")
         colmap_c = render_column_mapping(df_cancelled_raw, "cancelled", CANCELLED_FIELDS)
 
-        st.markdown("**For the WhatsApp message (optional but recommended):**")
+        st.markdown("**For the WhatsApp message — Courier / Shipping Method (optional):**")
         colmap_c.update(
             render_column_mapping(df_cancelled_raw, "cancelled_opt", CANCELLED_OPTIONAL_FIELDS, optional=True)
         )
         st.caption(
-            "If left unmapped, the message falls back to 'Team' for the name and 'N/A' for the courier."
+            "The recipient's name isn't mapped from the file — you'll type it in directly per order "
+            "below, once the report is generated."
         )
 
         missing_c = [data_loader.FIELD_LABELS[f] for f in CANCELLED_FIELDS if not colmap_c.get(f)]
@@ -128,55 +115,118 @@ with tab_cancelled:
                     cancelled_df = cancelled_report.build_cancelled_report(
                         df_cancelled_raw, colmap_c, as_of=datetime.now(), lookback_days=lookback_days
                     )
+                    st.session_state["cancelled_display_df"] = cancelled_report.prepare_display_columns(
+                        cancelled_df, colmap_c
+                    )
+                    st.session_state["cancelled_lookback_used"] = lookback_days
+                    # Clear any previous edits from a prior run so rows line up with the new data
+                    st.session_state.pop("cancelled_editor", None)
                 except KeyError as e:
                     st.error(f"Column mapping error: {e}")
-                    cancelled_df = None
 
-                if cancelled_df is not None:
-                    st.subheader("Results")
+        # Rendered from session_state (not inside the button block) so ticking checkboxes /
+        # typing names doesn't require clicking "Generate" again.
+        if "cancelled_display_df" in st.session_state:
+            display_df = st.session_state["cancelled_display_df"]
+            lookback_used = st.session_state.get("cancelled_lookback_used", 20)
 
-                    display_df = cancelled_report.prepare_display_columns(cancelled_df, colmap_c)
+            st.subheader("Results")
 
-                    green_count = int((display_df["Cancelled Status"] == "GREEN").sum())
-                    red_count = int((display_df["Cancelled Status"] == "RED").sum())
+            green_count = int((display_df["Cancelled Status"] == "GREEN").sum())
+            red_count = int((display_df["Cancelled Status"] == "RED").sum())
 
-                    card_col1, card_col2 = st.columns(2)
-                    with card_col1:
-                        st.markdown(
-                            f"""<div style="background-color:#C6EFCE;border-radius:8px;padding:16px;text-align:center">
-                            <div style="font-size:28px;font-weight:700;color:#006100">{green_count}</div>
-                            <div style="font-size:13px;color:#006100">Green — Total orders requiring seller action</div>
-                            </div>""",
-                            unsafe_allow_html=True,
-                        )
-                    with card_col2:
-                        st.markdown(
-                            f"""<div style="background-color:#FFC7CE;border-radius:8px;padding:16px;text-align:center">
-                            <div style="font-size:28px;font-weight:700;color:#9C0006">{red_count}</div>
-                            <div style="font-size:13px;color:#9C0006">Red — Total orders not requiring seller action</div>
-                            </div>""",
-                            unsafe_allow_html=True,
-                        )
+            card_col1, card_col2 = st.columns(2)
+            with card_col1:
+                st.markdown(
+                    f"""<div style="background-color:#C6EFCE;border-radius:8px;padding:16px;text-align:center">
+                    <div style="font-size:28px;font-weight:700;color:#006100">{green_count}</div>
+                    <div style="font-size:13px;color:#006100">Green — Total orders requiring seller action</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with card_col2:
+                st.markdown(
+                    f"""<div style="background-color:#FFC7CE;border-radius:8px;padding:16px;text-align:center">
+                    <div style="font-size:28px;font-weight:700;color:#9C0006">{red_count}</div>
+                    <div style="font-size:13px;color:#9C0006">Red — Total orders not requiring seller action</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
-                    st.write(
-                        f"{len(display_df):,} cancelled & refunded orders in the last {lookback_days} days."
-                    )
+            st.write(f"{len(display_df):,} cancelled & refunded orders in the last {lookback_used} days.")
 
-                    if len(display_df):
-                        styled = display_df.style.map(_highlight_color, subset=["Cancelled Status"]).map(
-                            _dark_font, subset=["Notification Message"]
-                        )
-                        st.dataframe(styled, use_container_width=True)
+            if len(display_df):
+                st.markdown(
+                    "**Tick an order, type the recipient's name, and its WhatsApp message appears below.**"
+                )
 
-                        cancelled_xlsx = excel_writer.build_cancelled_workbook(display_df)
-                        st.download_button(
-                            "⬇️ Download Cancelled_Report.xlsx",
-                            data=cancelled_xlsx,
-                            file_name="Cancelled_Report.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                editor_input = display_df.drop(columns=["_Courier"]).copy()
+                editor_input["Date"] = pd.to_datetime(editor_input["Date"], errors="coerce").dt.strftime(
+                    "%d-%m-%Y %H:%M"
+                )
+                editor_input.insert(0, "Seller / Recipient Name", "")
+                editor_input.insert(0, "Select", False)
+
+                read_only_cols = [c for c in editor_input.columns if c not in ("Select", "Seller / Recipient Name")]
+
+                edited = st.data_editor(
+                    editor_input,
+                    key="cancelled_editor",
+                    hide_index=True,
+                    use_container_width=True,
+                    num_rows="fixed",
+                    column_config={
+                        "Select": st.column_config.CheckboxColumn(
+                            "Select", help="Tick to generate the WhatsApp message for this order", default=False
+                        ),
+                        "Seller / Recipient Name": st.column_config.TextColumn(
+                            "Seller / Recipient Name", help="Type the recipient's name for the WhatsApp greeting"
+                        ),
+                    },
+                    disabled=read_only_cols,
+                )
+
+                couriers = display_df["_Courier"]
+                notification_messages = []
+                for pos, (_, row) in enumerate(edited.iterrows()):
+                    name = str(row["Seller / Recipient Name"]).strip()
+                    if bool(row["Select"]) and name:
+                        notification_messages.append(
+                            notifications.build_whatsapp_message(name, row["Order ID"], couriers.iloc[pos])
                         )
                     else:
-                        st.info("No cancelled/refunded orders found in this window.")
+                        notification_messages.append("")
+
+                export_df = edited.drop(columns=["Select", "Seller / Recipient Name"]).copy()
+                export_df["Notification Message"] = notification_messages
+                export_df = export_df[cancelled_report.EXPORT_COLUMNS]
+
+                ready_positions = [
+                    pos for pos, msg in enumerate(notification_messages) if msg
+                ]
+
+                if ready_positions:
+                    st.markdown("### 💬 WhatsApp messages ready to send")
+                    for pos in ready_positions:
+                        order_id = edited.iloc[pos]["Order ID"]
+                        st.text_area(
+                            f"Order {order_id}",
+                            value=notification_messages[pos],
+                            height=80,
+                            key=f"cancelled_msg_{order_id}_{pos}",
+                        )
+                else:
+                    st.caption("Tick a row and enter a name above to generate its WhatsApp message.")
+
+                cancelled_xlsx = excel_writer.build_cancelled_workbook(export_df)
+                st.download_button(
+                    "⬇️ Download Cancelled_Report.xlsx",
+                    data=cancelled_xlsx,
+                    file_name="Cancelled_Report.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            else:
+                st.info("No cancelled/refunded orders found in this window.")
     else:
         st.info("Upload a file above to generate the Cancelled Report.")
 
