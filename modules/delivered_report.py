@@ -50,7 +50,6 @@ def build_delivered_report(df: pd.DataFrame, colmap: dict) -> pd.DataFrame:
     out["Courier"] = filtered[colmap["courier"]]
     out["Tracking Number"] = filtered[colmap["tracking_number"]]
 
-    # Delivery date: fall back to Date if no dedicated delivery-date column was mapped
     if colmap.get("delivery_date") and colmap["delivery_date"] in filtered.columns:
         delivery_dt = pd.to_datetime(filtered[colmap["delivery_date"]], errors="coerce")
         delivery_dt = delivery_dt.fillna(out["Date"])
@@ -60,7 +59,6 @@ def build_delivered_report(df: pd.DataFrame, colmap: dict) -> pd.DataFrame:
     out["Tracking Link"] = out["Tracking Number"].apply(ninja_van_tracking_link)
     out["Last Day Delivery"] = delivery_dt + pd.Timedelta(days=7)
 
-    # Placeholders — populated later by modules/tracking.py
     out["Delivery Update in MP"] = ""
     out["Latest Update Date & Time"] = ""
     out["Latest Shipment Status"] = ""

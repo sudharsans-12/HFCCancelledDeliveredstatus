@@ -3,7 +3,8 @@ excel_writer.py
 ----------------
 Writes the Cancelled and Delivered reports to styled .xlsx files:
   - Bold header row with fill
-  - Green/Red fill on Shipping Carrier Status in the Cancelled report
+  - Green/Red/Yellow fill on Cancelled Status in the Cancelled report
+  - Dark font on the Notification Message column for readability
   - Clickable hyperlinks in the Tracking Link column of the Delivered report
   - Auto-sized columns
 """
@@ -79,7 +80,9 @@ def build_cancelled_workbook(df: pd.DataFrame) -> bytes:
     if "Notification Message" in df.columns:
         col_idx = list(df.columns).index("Notification Message") + 1
         for r in range(2, len(df) + 2):
-            ws.cell(row=r, column=col_idx).font = NOTIFICATION_FONT
+            cell = ws.cell(row=r, column=col_idx)
+            cell.font = NOTIFICATION_FONT
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -91,7 +94,6 @@ def build_delivered_workbook(df: pd.DataFrame) -> bytes:
     ws = wb.active
     ws.title = "Delivered Report"
 
-    # Format date columns as strings first so openpyxl doesn't fight datetime dtypes
     df = df.copy()
     for date_col in ("Date", "Last Day Delivery"):
         if date_col in df.columns:

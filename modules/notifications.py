@@ -1,44 +1,45 @@
 """
 notifications.py
 -----------------
-Builds the seller-facing WhatsApp / Email notification text for cancelled
-orders that need shipment cancellation, and (optionally) sends them if the
-user has configured credentials in Streamlit secrets.
+Generates the seller-facing WhatsApp message for cancelled orders that need
+shipment cancellation. The message format is fixed and exact — it is meant
+to be copy-pasted directly into WhatsApp, so nothing else (explanations,
+headings, extra text) is ever added around it.
 
-Nothing sends automatically unless secrets are present — by default this
-module just returns the message text so it can be shown/copied/exported
-from the app.
+Required format:
 
-To enable actual sending, add to .streamlit/secrets.toml (never commit this
-file):
+    Hi @~[Name] This order has been cancelled in the system. Kindly ensure
+    that's not shipped. Thank you
+    [Order Number] ( [Courier / Shipping Method] )
 
-    [twilio]
-    account_sid = "..."
-    auth_token = "..."
-    whatsapp_from = "whatsapp:+14155238886"   # Twilio WhatsApp sandbox/number
+Example:
 
-    [smtp]
-    host = "smtp.yourprovider.com"
-    port = 587
-    username = "..."
-    password = "..."
-    from_address = "ops@yourcompany.com"
+    Hi @~YiYen This order has been cancelled in the system. Kindly ensure
+    that's not shipped. Thank you
+    2608112TUYX42Y ( Seller's Own Fleet (West Malaysia) )
+
+send_whatsapp / send_email below are optional integration hooks — nothing
+sends automatically unless Twilio/SMTP secrets are configured. By default
+the app only shows the message text for manual copy-paste.
 """
 
 from email.mime.text import MIMEText
 import smtplib
 
+DEFAULT_NAME = "Team"
+DEFAULT_COURIER = "N/A"
 
-def build_message(order_id: str, carrier_status: str, urgency: str) -> str:
-    if urgency == "RED":
-        return (
-            f"[ACTION REQUIRED] Order {order_id} is CANCELLED & REFUNDED but the "
-            f"shipping carrier status is '{carrier_status}'. Please cancel this "
-            f"shipment immediately to avoid a failed/returned delivery."
-        )
+
+def build_whatsapp_message(name: str, order_number: str, courier: str) -> str:
+    """Returns the exact WhatsApp message text — nothing else."""
+    name = (str(name).strip() if name not in (None, "") else DEFAULT_NAME)
+    courier = (str(courier).strip() if courier not in (None, "") else DEFAULT_COURIER)
+    order_number = str(order_number).strip()
+
     return (
-        f"Order {order_id} is CANCELLED & REFUNDED. Carrier status is "
-        f"'{carrier_status}'. Please cancel the shipment for this order."
+        f"Hi @~{name} This order has been cancelled in the system. "
+        f"Kindly ensure that's not shipped. Thank you\n"
+        f"{order_number} ( {courier} )"
     )
 
 

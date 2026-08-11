@@ -21,8 +21,8 @@ REQUIRED_FIELDS = {
     "order_date": ["Order Date", "Date", "Created Date", "Order Creation Date"],
     "sold_amount": ["Sold Amount", "Amount", "Order Amount", "Total Amount", "Price"],
     "channel": ["Channel", "Marketplace", "Platform"],
-    "courier": ["Courier", "Shipping Provider", "Logistics Provider", "Carrier"],
-    "tracking_number": ["Tracking Number", "Tracking No", "AWB", "AWB Number"],
+    "courier": ["Courier", "Shipping Provider", "Logistics Provider", "Carrier", "Shipping Method"],
+    "tracking_number": ["Tracking Number", "Tracking No", "AWB", "AWB Number", "Tracking"],
     "shipping_carrier_status": [
         "Shipping Carrier Status",
         "Carrier Status",
@@ -34,6 +34,14 @@ REQUIRED_FIELDS = {
         "Delivered On",
         "Actual Delivery Date",
     ],
+    "seller_name": [
+        "Seller Name",
+        "Recipient Name",
+        "Contact Name",
+        "PIC",
+        "Assigned To",
+        "Name",
+    ],
 }
 
 FIELD_LABELS = {
@@ -43,10 +51,11 @@ FIELD_LABELS = {
     "order_date": "Order Date",
     "sold_amount": "Sold Amount",
     "channel": "Channel",
-    "courier": "Courier",
+    "courier": "Courier / Shipping Method",
     "tracking_number": "Tracking Number",
     "shipping_carrier_status": "Shipping Carrier Status",
     "delivery_date": "Delivery Date (used for Last Day Delivery on delivered orders)",
+    "seller_name": "Seller / Recipient Name (for WhatsApp message greeting)",
 }
 
 
@@ -59,8 +68,6 @@ def load_report(uploaded_file) -> pd.DataFrame:
     if name.endswith(".csv"):
         df = pd.read_csv(buf)
     else:
-        # Let pandas pick the engine; also handles multi-sheet by taking first sheet
-        # unless the caller inspects sheet names separately (see list_sheets below).
         df = pd.read_excel(buf)
 
     df.columns = [str(c).strip() for c in df.columns]
@@ -98,7 +105,6 @@ def suggest_mapping(columns):
         best = None
         best_score = 0.0
         for alias in aliases:
-            # exact case-insensitive match first
             if alias.lower() in lower_cols:
                 best = lower_cols[alias.lower()]
                 best_score = 1.0

@@ -4,14 +4,17 @@ cancelled_report.py
 Builds the Cancelled Report:
   - Order Status = Cancelled
   - Payment Status = Refunded
-  - Last 20 days only
-  - Shipping Carrier Status colour rule (Green / Red)
+  - Last N days only (default 20)
+  - Shipping Carrier Status colour rule (Green / Red / Review)
   - Seller action / Email / WhatsApp notification flags
+  - Notification Message: the exact copy-paste-ready WhatsApp message
 """
 
 from datetime import datetime, timedelta
 
 import pandas as pd
+
+from modules import notifications
 
 GREEN_STATUSES = {"not shipped", "shipped", "delivered", "n/a", "na", "not available"}
 RED_STATUSES = {"shipment_created", "shipment created"}
@@ -70,16 +73,16 @@ def build_cancelled_report(
     result["Email Required"] = result["Cancelled Status"].map(
         {"GREEN": "No", "RED": "Yes", "REVIEW": "Yes"}
     )
-    result["Notification Message"] = result.apply(
-        lambda r: (
-            "URGENT: Please cancel the shipment for this order immediately."
-            if r["Cancelled Status"] == "RED"
-            else "Please cancel the shipment for this order."
-            if r["Cancelled Status"] == "GREEN"
-            else "Carrier status unrecognised - please review manually."
-        ),
-        axis=1,
-    )
+
+    name_col = colmap.get("seller_name")
+    courier_col = colmap.get("courier")
+
+    def _message(row):
+        name = row[name_col] if name_col and name_col in result.columns else None
+        courier = row[courier_col] if courier_col and courier_col in result.columns else None
+        return notifications.build_whatsapp_message(name, row[colmap["order_id"]], courier)
+
+    result["Notification Message"] = result.apply(_message, axis=1)
 
     result = result.drop(columns=["_order_date_parsed"])
     return result
