@@ -3,21 +3,19 @@ HFC Automation - Cancelled & Delivered Report Generator
 =========================================================
 Two independent tabs, each with its own upload:
   - Cancelled Report tab: upload the file that contains your cancelled
-    orders, map columns, generate Cancelled_Report.xlsx
+    orders, map columns, generate Cancelled_Report.xlsx. Includes a
+    copy-paste-ready WhatsApp message per order.
   - Delivered Report tab: upload the file that contains your delivered
     orders (can be the same file or a different export), map columns,
-    generate Delivered_Report.xlsx
-
-Uploads are independent so you can run either report on its own, using
-whichever export you actually have on hand for that report.
+    generate Delivered_Report.xlsx.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
 
-from modules import data_loader, cancelled_report, delivered_report, tracking, excel_writer, notifications
+from modules import data_loader, cancelled_report, delivered_report, tracking, excel_writer
 
 st.set_page_config(page_title="HFC Automation", page_icon="📦", layout="wide")
 
@@ -27,12 +25,18 @@ st.caption(
     "then generate a styled, ready-to-download .xlsx."
 )
 
-CANCELLED_FIELDS = ["order_id", "order_status", "payment_status", "order_date", "shipping_carrier_status"]
+CANCELLED_FIELDS = [
+    "order_id",
+    "order_status",
+    "payment_status",
+    "order_date",
+    "shipping_carrier_status",
+]
+CANCELLED_OPTIONAL_FIELDS = ["seller_name", "courier"]  # used to build the WhatsApp message
 DELIVERED_FIELDS = ["order_id", "order_status", "order_date", "sold_amount", "channel", "courier", "tracking_number"]
 
 
 def load_upload(uploaded_file, key_prefix: str) -> pd.DataFrame:
-    """Handles sheet selection + loading for a single uploaded file."""
     sheet_names = data_loader.list_sheets(uploaded_file)
     if sheet_names and len(sheet_names) > 1:
         sheet = st.selectbox("Select sheet", sheet_names, key=f"{key_prefix}_sheet")
@@ -43,17 +47,17 @@ def load_upload(uploaded_file, key_prefix: str) -> pd.DataFrame:
     return df
 
 
-def render_column_mapping(df: pd.DataFrame, key_prefix: str, fields_needed=None):
-    """Renders the column-mapping selectboxes for the given fields and returns colmap."""
+def render_column_mapping(df: pd.DataFrame, key_prefix: str, fields_needed, optional=False):
+    """Renders the column-mapping selectboxes for the given fields and returns colmap.
+    When optional=True, '-- not in file --' is a valid final choice (no warning)."""
     suggestions = data_loader.suggest_mapping(df.columns.tolist())
     columns_with_blank = ["-- not in file --"] + df.columns.tolist()
 
-    fields = fields_needed or list(data_loader.REQUIRED_FIELDS.keys())
     colmap = {}
     col_left, col_right = st.columns(2)
-    half = len(fields) // 2 + 1
+    half = len(fields_needed) // 2 + 1
 
-    for i, field in enumerate(fields):
+    for i, field in enumerate(fields_needed):
         target_col = col_left if i < half else col_right
         label = data_loader.FIELD_LABELS[field]
         default = suggestions.get(field)
@@ -101,6 +105,14 @@ with tab_cancelled:
         st.subheader("2. Map your columns")
         st.caption("Auto-suggested where possible — double-check before running.")
         colmap_c = render_column_mapping(df_cancelled_raw, "cancelled", CANCELLED_FIELDS)
+
+        st.markdown("**For the WhatsApp message (optional but recommended):**")
+        colmap_c.update(
+            render_column_mapping(df_cancelled_raw, "cancelled_opt", CANCELLED_OPTIONAL_FIELDS, optional=True)
+        )
+        st.caption(
+            "If left unmapped, the message falls back to 'Team' for the name and 'N/A' for the courier."
+        )
 
         missing_c = [data_loader.FIELD_LABELS[f] for f in CANCELLED_FIELDS if not colmap_c.get(f)]
         if missing_c:
