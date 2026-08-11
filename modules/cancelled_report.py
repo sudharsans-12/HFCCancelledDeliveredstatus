@@ -7,14 +7,15 @@ Builds the Cancelled Report:
   - Last N days only (default 20)
   - Shipping Carrier Status colour rule (Green / Red / Review)
   - Seller action / Email / WhatsApp notification flags
-  - Notification Message: the exact copy-paste-ready WhatsApp message
+
+The WhatsApp Notification Message is NOT built here — the recipient name is
+entered manually per-row in the app (via an editable table), so the message
+is assembled in app.py once the user has ticked a row and typed a name.
 """
 
 from datetime import datetime, timedelta
 
 import pandas as pd
-
-from modules import notifications
 
 GREEN_STATUSES = {"not shipped", "shipped", "delivered", "n/a", "na", "not available"}
 RED_STATUSES = {"shipment_created", "shipment created"}
@@ -74,16 +75,6 @@ def build_cancelled_report(
         {"GREEN": "No", "RED": "Yes", "REVIEW": "Yes"}
     )
 
-    name_col = colmap.get("seller_name")
-    courier_col = colmap.get("courier")
-
-    def _message(row):
-        name = row[name_col] if name_col and name_col in result.columns else None
-        courier = row[courier_col] if courier_col and courier_col in result.columns else None
-        return notifications.build_whatsapp_message(name, row[colmap["order_id"]], courier)
-
-    result["Notification Message"] = result.apply(_message, axis=1)
-
     result = result.drop(columns=["_order_date_parsed"])
     return result
 
@@ -104,8 +95,10 @@ EXPORT_COLUMNS = [
 
 def prepare_display_columns(result: pd.DataFrame, colmap: dict) -> pd.DataFrame:
     """
-    Builds the fixed 10-column view used for BOTH the dashboard table and the
-    exported Cancelled_Report.xlsx, so the two always stay in sync.
+    Builds the fixed dashboard/export column set (minus Notification Message,
+    which is assembled later once a name is entered per row). Also carries a
+    hidden '_Courier' helper column (not displayed/exported directly) so the
+    app can build the WhatsApp message without a second lookup.
     """
     out = pd.DataFrame()
     out["Order ID"] = result[colmap["order_id"]]
@@ -117,5 +110,8 @@ def prepare_display_columns(result: pd.DataFrame, colmap: dict) -> pd.DataFrame:
     out["Seller Action Required"] = result["Seller Action Required"]
     out["WhatsApp Required"] = result["WhatsApp Required"]
     out["Email Required"] = result["Email Required"]
-    out["Notification Message"] = result["Notification Message"]
+
+    courier_col = colmap.get("courier")
+    out["_Courier"] = result[courier_col] if courier_col and courier_col in result.columns else ""
+
     return out.reset_index(drop=True)

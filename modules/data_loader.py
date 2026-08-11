@@ -34,14 +34,6 @@ REQUIRED_FIELDS = {
         "Delivered On",
         "Actual Delivery Date",
     ],
-    "seller_name": [
-        "Seller Name",
-        "Recipient Name",
-        "Contact Name",
-        "PIC",
-        "Assigned To",
-        "Name",
-    ],
 }
 
 FIELD_LABELS = {
@@ -55,7 +47,6 @@ FIELD_LABELS = {
     "tracking_number": "Tracking Number",
     "shipping_carrier_status": "Shipping Carrier Status",
     "delivery_date": "Delivery Date (used for Last Day Delivery on delivered orders)",
-    "seller_name": "Seller / Recipient Name (for WhatsApp message greeting)",
 }
 
 
